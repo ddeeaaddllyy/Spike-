@@ -2,6 +2,8 @@
 #![no_main]
 
 mod display;
+mod gestures;
+mod pet;
 mod topics;
 
 use core::{cell::RefCell, panic::PanicInfo};
@@ -24,6 +26,8 @@ use esp_hal::{
 use font8x8::legacy::BASIC_LEGACY;
 
 use display::{Display, HEIGHT, Row, WIDTH};
+use gestures::{Gesture, Gestures};
+use pet::Pet;
 use topics::Topics;
 
 esp_bootloader_esp_idf::esp_app_desc!();
@@ -74,11 +78,15 @@ fn main() -> ! {
     let mut usb = UsbSerialJtag::new(peripherals.USB_DEVICE);
     report(&mut usb, b"AMOLED frame sent\r\n");
 
-    let button = Input::new(
+    let boot_pin = Input::new(
         peripherals.GPIO0,
         InputConfig::default().with_pull(Pull::Up),
     );
-    let mut button = Button::new(button);
+    let pwr_pin = Input::new(
+        peripherals.GPIO17,
+        InputConfig::default().with_pull(Pull::Up),
+    );
+    let (mut boot, mut pwr) = (Button::new(boot_pin), Button::new(pwr_pin));
     let mut i2c = I2c::new(peripherals.I2C0, I2cConfig::default())
         .unwrap()
         .with_sda(peripherals.GPIO47)
@@ -92,28 +100,53 @@ fn main() -> ! {
         INPUT_TIMER.borrow_ref_mut(cs).replace(timer);
     });
 
-    let mut show_topics = false;
+    let mut screen = Screen::Greeting;
     let mut topics = Topics::new();
+    let mut pet = Pet::new();
+    let mut gestures = Gestures::default();
     let mut last_touch = Instant::now();
     let mut reported_drag = false;
     loop {
-        if button.pressed() {
-            show_topics = !show_topics;
-            topics.drag(None);
-            if show_topics {
-                display = display.draw(|y, row| topics.draw_row(y, row));
-                report(&mut usb, b"Topic map open\r\n");
+        let (boot_pressed, pwr_pressed) = (boot.pressed(), pwr.pressed());
+        let next = if pwr_pressed {
+            Some(Screen::Pet)
+        } else if boot_pressed {
+            Some(Screen::Topics)
+        } else {
+            None
+        };
+        if let Some(next) = next {
+            screen = if next == screen {
+                Screen::Greeting
             } else {
-                display = display.draw(draw_greeting);
-                report(&mut usb, b"Greeting open\r\n");
-            }
+                next
+            };
+            topics.drag(None);
+            gestures.clear();
+            let _ = pet.tick(Instant::now().duration_since_epoch().as_millis());
+            display = display.draw(|y, row| match screen {
+                Screen::Greeting => draw_greeting(y, row),
+                Screen::Topics => topics.draw_row(y, row),
+                Screen::Pet => pet.draw_row(y, row),
+            });
+            report(&mut usb, screen.message());
         }
 
-        if show_topics {
-            match touch_position(&mut i2c) {
+        let now = Instant::now();
+        let now_ms = now.duration_since_epoch().as_millis();
+        if screen != Screen::Greeting {
+            let sample = match touch_position(&mut i2c) {
                 Ok(position) => {
-                    last_touch = Instant::now();
-                    if topics.drag(position) {
+                    last_touch = now;
+                    Some(position)
+                }
+                Err(_) if last_touch.elapsed() >= TOUCH_TIMEOUT => Some(None),
+                Err(_) => None,
+            };
+
+            match screen {
+                Screen::Topics => {
+                    if sample.is_some_and(|position| topics.drag(position)) {
                         display = display.draw(|y, row| topics.draw_row(y, row));
                         if !reported_drag {
                             report(&mut usb, b"Topic map moved\r\n");
@@ -121,13 +154,50 @@ fn main() -> ! {
                         }
                     }
                 }
-                Err(_) if last_touch.elapsed() >= TOUCH_TIMEOUT => {
-                    topics.drag(None);
+                Screen::Pet => {
+                    let gesture = sample.and_then(|position| gestures.sample(position, now_ms));
+                    if let Some(gesture) = gesture {
+                        pet.react(gesture, now_ms);
+                        report(&mut usb, gesture_message(gesture));
+                    }
+                    if gesture.is_some() || pet.tick(now_ms) {
+                        display = display.draw_region(pet::REDRAW_X, pet::REDRAW_Y, |y, row| {
+                            pet.draw_row(y, row)
+                        });
+                    }
                 }
-                Err(_) => {}
+                Screen::Greeting => {}
             }
         }
         wait_for_interrupt();
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Screen {
+    Greeting,
+    Topics,
+    Pet,
+}
+
+impl Screen {
+    fn message(self) -> &'static [u8] {
+        match self {
+            Self::Greeting => b"Greeting open\r\n",
+            Self::Topics => b"Topic map open\r\n",
+            Self::Pet => b"Pet open\r\n",
+        }
+    }
+}
+
+fn gesture_message(gesture: Gesture) -> &'static [u8] {
+    match gesture {
+        Gesture::Tap => b"Pet: tap\r\n",
+        Gesture::Hold => b"Pet: hold\r\n",
+        Gesture::Left => b"Pet: left\r\n",
+        Gesture::Right => b"Pet: right\r\n",
+        Gesture::Up => b"Pet: up\r\n",
+        Gesture::Down => b"Pet: down\r\n",
     }
 }
 

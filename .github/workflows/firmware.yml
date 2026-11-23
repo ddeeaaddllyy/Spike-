@@ -1,0 +1,101 @@
+name: Firmware CI and release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Verify tag and build ESP32-S3 firmware
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify the tagged commit is in main
+        run: |
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo '::error::The tag must point to a commit on origin/main.'
+            exit 1
+          fi
+
+      - uses: esp-rs/xtensa-toolchain@v1.6
+        with:
+          buildtargets: esp32s3
+          version: '1.97.0.0'
+          override: false
+          ldproxy: false
+
+      - name: Check and build
+        run: |
+          cargo +esp fmt --all -- --check
+          cargo +esp clippy --release --locked -- -D warnings
+          cargo +esp build --release --locked
+
+      - name: Install espflash
+        run: |
+          archive="$RUNNER_TEMP/espflash-x86_64-unknown-linux-gnu.zip"
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/esp-rs/espflash/releases/download/v4.7.0/espflash-x86_64-unknown-linux-gnu.zip \
+            --output "$archive"
+          echo "8ab3bafeb212ccb1d7a9c422936b9bc86f8b00fe2731053ed8ab875c8d2f0c4d  $archive" | sha256sum --check
+          unzip -q "$archive" -d "$RUNNER_TEMP/espflash"
+          chmod +x "$RUNNER_TEMP/espflash/espflash"
+          echo "$RUNNER_TEMP/espflash" >> "$GITHUB_PATH"
+
+      - name: Package a flash image and checksum
+        run: |
+          mkdir -p dist
+          espflash save-image --chip esp32s3 --flash-size 8mb --merge --skip-padding \
+            target/xtensa-esp32s3-none-elf/release/Spike dist/spike-esp32s3.bin
+          cd dist
+          sha256sum spike-esp32s3.bin > spike-esp32s3.bin.sha256
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: firmware
+          path: dist/spike-esp32s3.bin*
+          if-no-files-found: error
+          overwrite: true
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: firmware
+          path: dist
+
+      - name: Verify and publish firmware
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha256sum --check spike-esp32s3.bin.sha256
+          assets=(spike-esp32s3.bin spike-esp32s3.bin.sha256)
+          if draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft); then
+            if [[ "$draft" == 'true' ]]; then
+              gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"
+              gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false
+            else
+              echo 'This tag already has a published release.'
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes "${assets[@]}"
+          fi

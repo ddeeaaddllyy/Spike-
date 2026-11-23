@@ -1,9 +1,4 @@
-use embedded_graphics::{
-    geometry::{OriginDimensions, Point},
-    image::GetPixel,
-    mono_font::iso_8859_5::FONT_9X18_BOLD,
-    pixelcolor::BinaryColor,
-};
+use embedded_graphics::geometry::Point;
 
 use crate::display::{Color, HEIGHT, Row, WIDTH, rgb};
 
@@ -140,7 +135,7 @@ impl Topics {
 
         if self.show_hint && (397..435).contains(&y) {
             row.span(140, 326, SURFACE);
-            label_row(row, y - 407, WIDTH / 2, "Перетащи карту", HINT);
+            row.label(y - 407, WIDTH / 2, "Перетащи карту", HINT);
         }
     }
 }
@@ -183,31 +178,5 @@ fn draw_node(row: &mut Row<'_>, y: i32, offset: i32, node: &Node, tree: &Tree) {
             if root { tree.root_fill } else { SURFACE },
         );
     }
-    label_row(row, y - node.y + 9, center, node.label, TEXT);
-}
-
-fn label_row(row: &mut Row<'_>, y: i32, center: i32, text: &str, color: Color) {
-    let font = &FONT_9X18_BOLD;
-    let glyph_width = font.character_size.width as i32;
-    let glyph_height = font.character_size.height as i32;
-    if !(0..glyph_height).contains(&y) {
-        return;
-    }
-
-    let pitch = glyph_width + font.character_spacing as i32;
-    let columns = (font.image.size().width / font.character_size.width) as i32;
-    let mut left = center - (text.chars().count() as i32 * pitch) / 2;
-    for character in text.chars() {
-        if left < WIDTH && left + glyph_width > 0 {
-            let index = font.glyph_mapping.index(character) as i32;
-            let glyph_x = (index % columns) * glyph_width;
-            let glyph_y = (index / columns) * glyph_height;
-            for x in 0..glyph_width {
-                if font.image.pixel(Point::new(glyph_x + x, glyph_y + y)) == Some(BinaryColor::On) {
-                    row.span(left + x, left + x + 1, color);
-                }
-            }
-        }
-        left += pitch;
-    }
+    row.label(y - node.y + 9, center, node.label, TEXT);
 }
