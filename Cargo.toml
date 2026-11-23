@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+critical-section = "1.2.0"
+embedded-graphics = "0.8.2"
 esp-bootloader-esp-idf = { version = "~0.6.0", features = ["esp32s3"] }
 esp-hal = { version = "~1.2.0", features = ["esp32s3", "unstable"] }
 font8x8 = { version = "0.3.1", default-features = false }
