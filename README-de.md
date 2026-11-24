@@ -6,6 +6,13 @@
 
 Drück **PWR**, und Spike erscheint auf der Steinterrasse am See. Tipp ihn an, dann hüpft er vor Freude. Lass den Finger einen Moment liegen, und er schnurrt. Der kleine Reisende im pflaumenfarbenen Umhang ist das Maskottchen des Projekts. Auf seinem runden Display findest du auch eine Mathe-Lernkarte für die Klassen 10 und 11.
 
+## Wie Spike entstanden ist
+
+- **Die ersten Pixel.** Am Anfang stand nur `hello everynwan` auf dem Display. Auf dem Board war der Text verkehrt herum zu sehen. Heute dreht der Treiber jeden Bildstreifen um 180° und löscht beim Start auch den Displayspeicher am Rand des sichtbaren Kreises.
+- **Vom Porträt zur Figur.** Zuerst bestand Spike aus einem einzigen Sprite. Eigene Posen für Schritte, Sprünge und Schlaf machen seine Reaktionen schon am Umriss erkennbar. Später kamen die Terrasse am See, Spitzbögen und elfenbeinfarbene Schrift hinzu.
+- **Eine Karte für die Fingerspitze.** Aus dem ersten Themenbaum wurden 14 Lernblätter. Beim Test auf dem Board reichte eine leichte Fingerbewegung, um die Karte versehentlich zu verschieben. Größere Schaltflächen und 24 Pixel Spielraum machen auch Berührungen am Rand zuverlässig. Die Rückkehr zur Karte erhält die Position.
+- **Strombedarf und Releases.** Nach einer Eingabepause schläft das Display auch bei laufender Animation ein. Für Release-Tags baut der Workflow getrennte russische und englische Images. Stichproben in den fertigen Dateien bestätigten, dass die geprüften Texte nur in der jeweiligen Sprachversion vorkommen.
+
 ## Bedienung
 
 | Aktion | Funktion |
@@ -45,3 +52,9 @@ Jedes Image enthält einen Satz übersetzter Texte und einen Zeichensatz für di
 Die Firmware zeichnet das AMOLED mit 466 × 466 Pixeln in Streifen von vier Zeilen. Dafür nutzt sie einen DMA-Puffer von 3840 Byte. Beim Bauen werden Spikes acht Posen als 4-Bit-Palettenbilder und der See als Folgen gleichfarbiger RGB565-Pixel gepackt. Beides liegt im Flash-Speicher. Bei der Animation wird nur Spikes Szenenbereich aktualisiert.
 
 Die Grafiken liegen in [assets](assets), die übersetzten Texte und Lernblätter in [src/lang](src/lang) und die Gestenerkennung in [src/gestures.rs](src/gestures.rs). Lokale Prüfungen beschreibt der [Leitfaden für Mitwirkende](AGENTS.md). Ein Tag nach dem Muster `v*` auf einem Commit aus der Historie von `main` erzeugt zwei Release-Images, `spike-esp32s3.bin` (RU) und `spike-esp32s3-en.bin` (EN), jeweils mit SHA-256-Prüfsumme. [Release-Workflow](.github/workflows/firmware.yml)
+
+## Ideen für die nächste Version
+
+1. **Abschaltzeit merken.** Den Wert bei einer Änderung speichern, damit er nach dem Neustart wieder gilt.
+2. **Mit den Lernblättern üben.** Mit einer Aufgabe zur Ableitung beginnen und den Rechenweg durch Antippen einblenden. Die Formel bleibt zum schnellen Nachschlagen zugänglich.
+3. **Stromaufnahme messen.** Auf demselben Board drei Zustände vergleichen: Spike in Bewegung, die geöffnete Lernkarte und das schlafende Display. Die Messwerte helfen bei der Entscheidung, ob sich ein tieferer Schlafmodus lohnt.

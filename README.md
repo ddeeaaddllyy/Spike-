@@ -6,6 +6,13 @@
 
 Press **PWR** and Spike steps onto a stone terrace by the lake. Tap him and he jumps for joy. Hold your finger still and he purrs. The little traveller in the plum cloak is the project's mascot, sharing the round display with a maths map for grades 10 and 11.
 
+## How Spike took shape
+
+- **First pixels.** The first firmware drew `hello everynwan`. Reading it on the board revealed that the image needed a 180° turn. The driver now rotates each strip and clears the panel memory around the visible circle at startup.
+- **From portrait to pet.** Spike began as a single sprite. Giving him separate walking, jumping and sleeping poses made gestures visible in his silhouette. The moonlit lake and the ivory lettering under pointed arches gave the two-button interface its character.
+- **A map you can use with one finger.** The early maths tree grew into 14 topic cards. On the board, a small finger movement could turn a tap into a drag. Larger targets and a 24-pixel movement allowance let you open a topic near its edge and return to the same spot.
+- **Power and releases.** An idle timeout puts the AMOLED to sleep even while Spike is animating. The tagged release workflow builds Russian and English images separately. Checks on the packaged images confirmed that the sampled translations appear only in the matching build.
+
 ## On the board
 
 | Control | What happens |
@@ -45,3 +52,9 @@ Each image includes one UI catalogue and one label font. The startup greeting `h
 The 466 × 466 AMOLED is painted four rows at a time using a 3,840-byte DMA buffer. At build time, the eight poses become 4-bit palette images and the lake becomes runs of RGB565 pixels. Both live in flash. Pet animation updates just its drawing region.
 
 Edit the artwork in [assets](assets), translated labels and cards in [src/lang](src/lang), and gestures in [src/gestures.rs](src/gestures.rs). See the [contributor guide](AGENTS.md) for local checks. A `v*` tag on a commit reachable from `main` builds two release images, `spike-esp32s3.bin` (RU) and `spike-esp32s3-en.bin` (EN), each with a SHA-256 checksum. [Release workflow](.github/workflows/firmware.yml)
+
+## Ideas for the next version
+
+1. **Remember the timeout.** Save it when the chosen value changes so it survives a restart.
+2. **Add practice to the cards.** Start with one derivative problem and a tap to reveal the worked solution. The existing cards can still serve as quick references.
+3. **Measure battery use.** Compare current on the same board with Spike animating, the map open and the display asleep. Use those readings to decide whether deeper sleep is worth implementing.
