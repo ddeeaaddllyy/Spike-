@@ -12,14 +12,23 @@ const CENTER: i32 = WIDTH / 2;
 const GROUND: i32 = 355;
 const FRAME_MS: u64 = 48;
 const SPRITE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pet-sprite.bin"));
-const SPRITE_WIDTH: i32 = SPRITE[0] as i32;
-const SPRITE_HEIGHT: i32 = SPRITE[1] as i32;
-const RUNS_START: usize = 2 + (SPRITE_HEIGHT as usize + 1) * 2;
+const SIDE: usize = 96;
+const PALETTE_BYTES: usize = 32;
+#[derive(Clone, Copy)]
+#[repr(usize)]
+enum Pose {
+    Stand,
+    Breeze,
+    Bashful,
+    Cheer,
+    Stride,
+    Step,
+    Airborne,
+    Curled,
+}
 const SPRITE_SCALE: i32 = 2;
 
-const SKY: Color = rgb(15, 17, 29);
-const HALO: Color = rgb(63, 57, 78);
-const FLOOR: Color = rgb(30, 31, 48);
+const BACKGROUND: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/moonlake.bin"));
 const SHADOW: Color = rgb(23, 23, 36);
 const STAR: Color = rgb(249, 218, 153);
 const WHITE: Color = rgb(241, 233, 250);
@@ -103,7 +112,13 @@ impl Pet {
     pub fn tick(&mut self, now_ms: u64) -> bool {
         let duration = self.action.frames();
         if duration == 0 {
-            return false;
+            let phase = match self.action {
+                Action::Sleep => ((now_ms - self.started) / 800 % 2) as i32,
+                _ => i32::from((now_ms - self.started) / 600 % 4 == 1),
+            };
+            let changed = phase != self.frame;
+            self.frame = phase;
+            return changed;
         }
         let frame = ((now_ms - self.started) / FRAME_MS).min(duration as u64) as i32;
         if frame == self.frame {
@@ -113,6 +128,8 @@ impl Pet {
         if self.frame == duration {
             self.x = self.position();
             self.action = Action::Idle;
+            self.started = now_ms;
+            self.frame = 0;
         }
         true
     }
@@ -132,26 +149,7 @@ impl Pet {
     }
 
     pub fn draw_row(&self, y: i32, row: &mut Row<'_>) {
-        row.fill(SKY);
-        disk(row, y, CENTER, 223, 145, HALO);
-        disk(row, y, 338, 93, 21, STAR);
-        disk(row, y, 347, 86, 17, SKY);
-        for (x, star_y) in [
-            (120, 113),
-            (159, 79),
-            (103, 184),
-            (314, 146),
-            (366, 166),
-            (134, 255),
-        ] {
-            if (y - star_y).abs() <= 1 {
-                row.span(x - 1, x + 2, STAR);
-            }
-        }
-
-        if (340..375).contains(&y) {
-            row.span(70, WIDTH - 70, FLOOR);
-        }
+        background_row(y, row);
         let x = self.position();
         let shadow_y = (y - GROUND).abs();
         if shadow_y < 7 {
@@ -166,10 +164,37 @@ impl Pet {
             Action::Jump => self.lift(51),
             _ => 0,
         };
-        let height =
-            SPRITE_HEIGHT * SPRITE_SCALE - if self.action == Action::Sleep { 38 } else { 0 };
-        let top = GROUND - height - lift;
-        sprite_row(row, y - top, x, height, self.faces_left);
+        let pose = match self.action {
+            Action::Idle if self.frame == 1 => Pose::Breeze,
+            Action::Idle => Pose::Stand,
+            Action::Happy if self.frame < 3 => Pose::Bashful,
+            Action::Happy => Pose::Cheer,
+            Action::Petted => Pose::Bashful,
+            Action::Walk => match (self.frame / 2) % 4 {
+                0 => Pose::Stride,
+                2 => Pose::Step,
+                _ => Pose::Stand,
+            },
+            Action::Jump if (3..14).contains(&self.frame) => Pose::Airborne,
+            Action::Jump => Pose::Cheer,
+            Action::Sleep => Pose::Curled,
+        };
+        let breathing = if self.action == Action::Sleep {
+            self.frame * 2
+        } else {
+            0
+        };
+        let height = SIDE as i32 * SPRITE_SCALE - breathing;
+        let local_y = y - (GROUND - height - lift);
+        if (0..height).contains(&local_y) {
+            sprite_row(
+                row,
+                (local_y * SIDE as i32 / height) as usize,
+                x,
+                pose,
+                self.faces_left,
+            );
+        }
 
         match self.action {
             Action::Happy => icon(row, y, x + 57, 137 - self.frame * 3, HEART, 3, PINK),
@@ -195,38 +220,48 @@ impl Pet {
     }
 }
 
-fn sprite_row(row: &mut Row<'_>, y: i32, center: i32, height: i32, faces_left: bool) {
-    if !(0..height).contains(&y) {
-        return;
-    }
-    let index = (y * SPRITE_HEIGHT / height) as usize;
-    let offset = |index| {
-        let index = 2 + index * 2;
-        RUNS_START + usize::from(u16::from_le_bytes([SPRITE[index], SPRITE[index + 1]]))
-    };
-    let left = center - SPRITE_WIDTH * SPRITE_SCALE / 2;
-    let mut x = 0;
-    for run in SPRITE[offset(index)..offset(index + 1)].chunks_exact(3) {
-        let length = i32::from(run[0]);
-        let color = [run[1], run[2]];
-        if color != [0, 0] {
-            let offset = if faces_left {
-                SPRITE_WIDTH - x - length
-            } else {
-                x
-            };
-            let start = left + offset * SPRITE_SCALE;
-            row.span(start, start + length * SPRITE_SCALE, color);
+fn sprite_row(row: &mut Row<'_>, y: usize, center: i32, pose: Pose, faces_left: bool) {
+    let start = PALETTE_BYTES + (pose as usize * SIDE + y) * SIDE / 2;
+    let line = &SPRITE[start..start + SIDE / 2];
+    let index_at = |x: usize| {
+        let pair = line[x / 2];
+        if x.is_multiple_of(2) {
+            pair >> 4
+        } else {
+            pair & 15
         }
-        x += length;
+    };
+    let left = center - SIDE as i32 * SPRITE_SCALE / 2;
+    let mut x = 0;
+    while x < SIDE {
+        let first = x;
+        let index = index_at(x);
+        x += 1;
+        while x < SIDE && index_at(x) == index {
+            x += 1;
+        }
+        if index != 0 {
+            let offset = if faces_left { SIDE - x } else { first };
+            let begin = left + offset as i32 * SPRITE_SCALE;
+            let palette = usize::from(index) * 2;
+            row.span(
+                begin,
+                begin + (x - first) as i32 * SPRITE_SCALE,
+                [SPRITE[palette], SPRITE[palette + 1]],
+            );
+        }
     }
 }
 
-fn disk(row: &mut Row<'_>, y: i32, center: i32, cy: i32, radius: i32, color: Color) {
-    let distance = y - cy;
-    if distance.abs() < radius {
-        let half = ((radius * radius - distance * distance) as u32).isqrt() as i32;
-        row.span(center - half, center + half, color);
+fn background_row(y: i32, row: &mut Row<'_>) {
+    let index = 512 + y as usize / 2 * 2;
+    let offset = |i: usize| usize::from(u16::from_le_bytes([BACKGROUND[i], BACKGROUND[i + 1]]));
+    let mut x = 0;
+    for run in BACKGROUND[offset(index)..offset(index + 2)].chunks_exact(2) {
+        let next = x + 2 * i32::from(run[0]);
+        let i = usize::from(run[1]) * 2;
+        row.span(x, next, [BACKGROUND[i], BACKGROUND[i + 1]]);
+        x = next;
     }
 }
 
