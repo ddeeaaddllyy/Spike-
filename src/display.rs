@@ -72,6 +72,10 @@ impl Display {
         display
     }
 
+    pub fn brightness(self, level: u8) -> Self {
+        self.command(0x51, &[level])
+    }
+
     pub fn show(self) -> Self {
         self.command(0x29, &[])
     }

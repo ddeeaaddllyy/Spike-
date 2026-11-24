@@ -18,7 +18,7 @@ Drück **PWR**, und Spike erscheint auf der Steinterrasse am See. Tipp ihn an, d
 | Aktion | Funktion |
 | --- | --- |
 | PWR drücken | Spike erscheint. Wische seitwärts zum Gehen, nach oben zum Springen oder nach unten zum Einschlafen. Erneutes Drücken führt zur Begrüßung zurück. |
-| BOOT kurz drücken und loslassen | Öffnet die Einstellungen. Wähle **30**, **60** oder **120** Sekunden bis zum Abschalten des Displays. Die Auswahl gilt bis zum Neustart. Voreingestellt sind 60 Sekunden. |
+| BOOT kurz drücken und loslassen | Stelle die Helligkeit per Schieberegler (10–100%) und die Abschaltzeit auf **30**, **60** oder **120** Sekunden ein. Beides bleibt nach einem Neustart gespeichert. Bestätige **Power off**, um die Batterieversorgung abzuschalten oder bei USB-Betrieb in den Tiefschlaf zu wechseln. PWR startet das Gerät wieder. |
 | BOOT 0,9 Sekunden halten | Öffnet die Lernkarte. Ziehe sie seitwärts für weitere Themen. Wische nach oben, um von Klasse 11 zu Klasse 10 zu gelangen. |
 | Ein Thema antippen | Öffnet das Lernblatt. Mit **Back to map** (englische Firmware) kehrst du zur selben Stelle zurück. |
 | Bei ausgeschaltetem Display eine Taste drücken | Weckt die aktuelle Ansicht. Der nächste Tastendruck hat wieder die übliche Funktion. |
@@ -55,6 +55,5 @@ Die Grafiken liegen in [assets](assets), die übersetzten Texte und Lernblätter
 
 ## Ideen für die nächste Version
 
-1. **Abschaltzeit merken.** Den Wert bei einer Änderung speichern, damit er nach dem Neustart wieder gilt.
-2. **Mit den Lernblättern üben.** Mit einer Aufgabe zur Ableitung beginnen und den Rechenweg durch Antippen einblenden. Die Formel bleibt zum schnellen Nachschlagen zugänglich.
-3. **Stromaufnahme messen.** Auf demselben Board drei Zustände vergleichen: Spike in Bewegung, die geöffnete Lernkarte und das schlafende Display. Die Messwerte helfen bei der Entscheidung, ob sich ein tieferer Schlafmodus lohnt.
+1. **Mit den Lernblättern üben.** Mit einer Aufgabe zur Ableitung beginnen und den Rechenweg durch Antippen einblenden. Die Formel bleibt zum schnellen Nachschlagen zugänglich.
+2. **Stromaufnahme messen.** Auf demselben Board drei Zustände vergleichen: Spike in Bewegung, die geöffnete Lernkarte und das schlafende Display. Die Messwerte helfen bei der Entscheidung, ob das Gerät bei längerer Inaktivität automatisch in den Tiefschlaf wechseln soll.

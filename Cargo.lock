@@ -10,6 +10,7 @@ dependencies = [
  "embedded-graphics",
  "esp-bootloader-esp-idf",
  "esp-hal",
+ "esp-storage",
  "font8x8",
  "png",
 ]

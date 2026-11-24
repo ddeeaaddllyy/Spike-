@@ -18,7 +18,7 @@ Press **PWR** and Spike steps onto a stone terrace by the lake. Tap him and he j
 | Control | What happens |
 | --- | --- |
 | Press PWR | Open Spike’s scene. Swipe left or right to walk, up to leap, down to curl up asleep. Press PWR again to return to the greeting. |
-| Press and release BOOT | Open settings. Tap **30**, **60** or **120** seconds to set the display timeout until restart. The default is 60 seconds. |
+| Press and release BOOT | Drag the brightness slider (10–100%) or choose a **30**, **60** or **120** second timeout. Both settings survive restart. Tap **Power off** and confirm to release battery power or enter deep sleep on USB. Press PWR to start again. |
 | Hold BOOT for 0.9 s | Open the study map. Drag sideways for more topics, or swipe up to reach grade 10 below grade 11. |
 | Tap a topic | Read its card. **Back to map** restores the same spot. |
 | Press either button while the display sleeps | Wake the current screen. The next press works normally. |
@@ -55,6 +55,5 @@ Edit the artwork in [assets](assets), translated labels and cards in [src/lang](
 
 ## Ideas for the next version
 
-1. **Remember the timeout.** Save it when the chosen value changes so it survives a restart.
-2. **Add practice to the cards.** Start with one derivative problem and a tap to reveal the worked solution. The existing cards can still serve as quick references.
-3. **Measure battery use.** Compare current on the same board with Spike animating, the map open and the display asleep. Use those readings to decide whether deeper sleep is worth implementing.
+1. **Add practice to the cards.** Start with one derivative problem and a tap to reveal the worked solution. The existing cards can still serve as quick references.
+2. **Measure battery use.** Compare current on the same board with Spike animating, the map open and the display asleep. Use those readings to decide whether to enter deep sleep automatically after a longer idle period.

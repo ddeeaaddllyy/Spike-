@@ -7,6 +7,10 @@ mod gestures;
 #[cfg_attr(not(feature = "english"), path = "lang/ru.rs")]
 mod lang;
 mod pet;
+mod preferences;
+use esp_hal::gpio::{Event, WakeupConfig};
+use esp_hal::rtc_cntl::sleep::{LowPower, RtcSleepConfig};
+use preferences::{Preferences, Store};
 mod topics;
 
 use core::{cell::RefCell, panic::PanicInfo};
@@ -63,7 +67,9 @@ fn main() -> ! {
     let delay = Delay::new();
 
     // GPIO18 latches the board's power on when running from a battery.
-    let _power_hold = Output::new(peripherals.GPIO18, Level::High, OutputConfig::default());
+    let mut power_hold = Output::new(peripherals.GPIO18, Level::High, OutputConfig::default());
+    let (mut store, mut prefs) = Store::load(esp_storage::FlashStorage::new(peripherals.FLASH));
+    let mut persisted = prefs;
     let mut reset = Output::new(peripherals.GPIO8, Level::Low, OutputConfig::default());
     let mut touch_reset = Output::new(peripherals.GPIO7, Level::Low, OutputConfig::default());
     delay.delay_millis(10);
@@ -83,7 +89,10 @@ fn main() -> ! {
     .with_sio2(peripherals.GPIO14)
     .with_sio3(peripherals.GPIO15)
     .with_dma(peripherals.DMA_CH0);
-    let mut display = Display::new(spi, &delay).draw(draw_greeting).show();
+    let mut display = Display::new(spi, &delay)
+        .brightness(prefs.panel_level())
+        .draw(draw_greeting)
+        .show();
     let mut usb = UsbSerialJtag::new(peripherals.USB_DEVICE);
     report(&mut usb, b"AMOLED frame sent\r\n");
 
@@ -116,7 +125,9 @@ fn main() -> ! {
     let mut last_touch = Instant::now();
     let mut last_input = Instant::now();
     let mut boot_since = None;
-    let mut sleep_choice = 1;
+    let mut menu = SettingsMenu::default();
+    let mut sliding = false;
+    let mut dirty = false;
     let mut settings_contact = false;
     loop {
         let (boot_pressed, pwr_pressed) = (boot.pressed(), pwr.pressed());
@@ -147,11 +158,13 @@ fn main() -> ! {
                 next
             };
             settings_contact = true;
+            sliding = false;
+            menu.confirm = false;
             topics.close_note();
             topics.cancel_contact();
             gestures.clear();
             let _ = pet.tick(Instant::now().duration_since_epoch().as_millis());
-            display = screen.draw(display, &topics, &pet, sleep_choice);
+            display = screen.draw(display, &topics, &pet, prefs, &menu);
             report(&mut usb, screen.message());
         }
 
@@ -168,10 +181,12 @@ fn main() -> ! {
 
         if boot.stable || pwr.stable || matches!(sample, Some(Some(_))) {
             last_input = now;
-        } else if last_input.elapsed() >= Duration::from_secs(SLEEP_OPTIONS[sleep_choice].0) {
+        } else if last_input.elapsed() >= Duration::from_secs(SLEEP_OPTIONS[prefs.timeout].0) {
             display = display.sleep();
             report(&mut usb, b"Display asleep\r\n");
             settings_contact = true;
+            sliding = false;
+            menu.confirm = false;
             topics.cancel_contact();
             gestures.clear();
             // Sleep-in needs time to settle before sending sleep-out.
@@ -186,9 +201,9 @@ fn main() -> ! {
             while asleep_since.elapsed() < Duration::from_millis(120) {
                 wait_for_interrupt();
             }
-            display = display.wake(&delay);
+            display = display.wake(&delay).brightness(prefs.panel_level());
             pet.tick(Instant::now().duration_since_epoch().as_millis());
-            display = screen.draw(display, &topics, &pet, sleep_choice).show();
+            display = screen.draw(display, &topics, &pet, prefs, &menu).show();
             last_input = Instant::now();
             last_touch = last_input;
             report(&mut usb, b"Display awake\r\n");
@@ -214,18 +229,72 @@ fn main() -> ! {
             }
             Screen::Settings => {
                 if let Some(position) = sample {
-                    if !settings_contact
-                        && let Some(p) = position
-                        && (74..392).contains(&p.x)
-                        && (196..272).contains(&p.y)
-                    {
-                        sleep_choice = ((p.x - 74) / 106) as usize;
-                        display = screen.draw(display, &topics, &pet, sleep_choice);
+                    if let Some(p) = position {
+                        let fresh = !settings_contact;
+                        if fresh {
+                            sliding = !menu.confirm
+                                && (60..406).contains(&p.x)
+                                && (90..170).contains(&p.y);
+                        }
+                        let before = prefs;
+                        let was_confirm = menu.confirm;
+                        if sliding {
+                            prefs.brightness =
+                                (1 + ((p.x.clamp(90, 376) - 90) * 9 + 143) / 286) as u8;
+                        } else if fresh && menu.confirm && (220..300).contains(&p.y) {
+                            if (65..221).contains(&p.x) {
+                                menu.confirm = false;
+                            }
+                            if (245..401).contains(&p.x) {
+                                if prefs != persisted && !store.save(prefs) {
+                                    report(&mut usb, b"Settings save failed\r\n");
+                                }
+                                report(&mut usb, b"Power off\r\n");
+                                display.sleep();
+                                touch_reset.set_low();
+                                pwr.pin
+                                    .apply_wakeup_config(
+                                        &WakeupConfig::default().with_low_power_path(true),
+                                    )
+                                    .unwrap();
+                                pwr.pin.listen(Event::LowLevel);
+                                power_hold.set_low();
+                                LowPower::new(peripherals.LPWR).sleep_deep(RtcSleepConfig::deep());
+                            }
+                        } else if fresh && !menu.confirm {
+                            if (74..392).contains(&p.x) && (214..276).contains(&p.y) {
+                                prefs.timeout = ((p.x - 74) / 106) as usize;
+                            } else if (106..360).contains(&p.x) && (310..383).contains(&p.y) {
+                                menu.confirm = true;
+                            }
+                        }
+                        if before != prefs {
+                            dirty = true;
+                            if before.brightness != prefs.brightness {
+                                display = display.brightness(prefs.panel_level());
+                            }
+                        }
+                        if before != prefs || was_confirm != menu.confirm {
+                            display = screen.draw(display, &topics, &pet, prefs, &menu);
+                        }
+                    } else {
+                        sliding = false;
                     }
                     settings_contact = position.is_some();
                 }
             }
             Screen::Greeting => {}
+        }
+        if dirty && (!sliding || screen != Screen::Settings) {
+            dirty = false;
+            let old_error = menu.save_error;
+            menu.save_error = prefs != persisted && !store.save(prefs);
+            if !menu.save_error {
+                persisted = prefs;
+            }
+            if menu.save_error != old_error && screen == Screen::Settings {
+                display = screen.draw(display, &topics, &pet, prefs, &menu);
+            }
         }
         wait_for_interrupt();
     }
@@ -240,9 +309,16 @@ enum Screen {
 }
 
 impl Screen {
-    fn draw(self, display: Display, topics: &Topics, pet: &Pet, sleep_choice: usize) -> Display {
+    fn draw(
+        self,
+        display: Display,
+        topics: &Topics,
+        pet: &Pet,
+        prefs: Preferences,
+        menu: &SettingsMenu,
+    ) -> Display {
         display.draw(|y, row| match self {
-            Screen::Settings => draw_settings(y, row, sleep_choice),
+            Screen::Settings => menu.draw(y, row, prefs),
             Screen::Greeting => draw_greeting(y, row),
             Screen::Topics => topics.draw_row(y, row),
             Screen::Pet => pet.draw_row(y, row),
@@ -327,31 +403,82 @@ fn touch_position(i2c: &mut I2c<'_, Blocking>) -> Result<Option<Point>, I2cError
     Ok(Some(Point::new(WIDTH - 1 - x, HEIGHT - 1 - y)))
 }
 
-fn draw_settings(y: i32, row: &mut Row<'_>, choice: usize) {
+#[derive(Default)]
+struct SettingsMenu {
+    confirm: bool,
+    save_error: bool,
+}
+
+impl SettingsMenu {
+    fn draw(&self, y: i32, row: &mut Row<'_>, prefs: Preferences) {
+        use display::rgb;
+        let text = rgb(255, 242, 214);
+        row.fill(rgb(20, 14, 25));
+        row.arch(y);
+        let center = WIDTH / 2;
+        if self.confirm {
+            row.label(y - 129, center, lang::CONFIRM_OFF, text);
+            row.label(y - 166, center, lang::POWER_ON_HINT, text);
+            settings_button(row, y, 65..221, 220..300, lang::CANCEL, false);
+            settings_button(row, y, 245..401, 220..300, lang::POWER_OFF, true);
+            return;
+        }
+        row.label(y - 37, center, lang::SETTINGS, text);
+        row.label(y - 88, center, lang::BRIGHTNESS, text);
+        let thumb = 90 + (i32::from(prefs.brightness) - 1) * 286 / 9;
+        if (131..139).contains(&y) {
+            row.span(90, 376, rgb(91, 66, 81));
+            row.span(90, thumb, rgb(216, 170, 118));
+        }
+        if (117..153).contains(&y) {
+            row.span(thumb - 8, thumb + 9, text);
+        }
+        row.label(y - 179, center, lang::TIMEOUT, text);
+        for (index, &(_, label)) in SLEEP_OPTIONS.iter().enumerate() {
+            let x = 74 + index as i32 * 106;
+            settings_button(row, y, x..x + 103, 214..276, label, index == prefs.timeout);
+        }
+        settings_button(row, y, 106..360, 310..383, lang::POWER_OFF, false);
+        if self.save_error {
+            row.label(y - 393, center, lang::SAVE_ERROR, text);
+        }
+    }
+}
+
+fn settings_button(
+    row: &mut Row<'_>,
+    y: i32,
+    x: core::ops::Range<i32>,
+    band: core::ops::Range<i32>,
+    label: &str,
+    selected: bool,
+) {
     use display::rgb;
-    let text = rgb(255, 242, 214);
-    row.fill(rgb(20, 14, 25));
-    row.arch(y);
-    row.label(y - 94, WIDTH / 2, crate::lang::SETTINGS, text);
-    row.label(y - 154, WIDTH / 2, crate::lang::TIMEOUT, text);
-    for (index, &(_, label)) in SLEEP_OPTIONS.iter().enumerate() {
-        let x = 74 + 106 * index as i32;
-        if (196..272).contains(&y) {
-            let fill = if index == choice {
+    if !band.contains(&y) {
+        return;
+    }
+    let edge = (y - band.start).min(band.end - 1 - y);
+    let cut = (8 - edge).max(0);
+    row.span(x.start + cut, x.end - cut, rgb(202, 160, 118));
+    if edge >= 2 {
+        row.span(
+            x.start + cut + 2,
+            x.end - cut - 2,
+            if selected {
                 rgb(118, 48, 70)
             } else {
                 rgb(57, 38, 55)
-            };
-            let cut = (8 - (y - 196).min(271 - y)).max(0);
-            row.span(x + cut, x + 103 - cut, rgb(202, 160, 118));
-            if (199..269).contains(&y) {
-                row.span(x + cut + 2, x + 101 - cut, fill);
-            }
-        }
-        row.label(y - 223, x + 51, label, text);
+            },
+        );
     }
-    row.label(y - 304, WIDTH / 2, crate::lang::UNTIL_RESET, text);
+    row.label(
+        y - (band.start + band.end) / 2 + 9,
+        (x.start + x.end) / 2,
+        label,
+        rgb(255, 242, 214),
+    );
 }
+
 fn draw_greeting(y: i32, row: &mut Row<'_>) {
     row.fill(display::rgb(20, 14, 25));
     row.arch(y);

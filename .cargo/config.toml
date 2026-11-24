@@ -2,7 +2,7 @@
 target = "xtensa-esp32s3-none-elf"
 
 [target.xtensa-esp32s3-none-elf]
-runner = ["espflash", "flash", "--chip", "esp32s3", "--monitor", "--skip-update-check"]
+runner = ["espflash", "flash", "--chip", "esp32s3", "--partition-table", "partitions.csv", "--monitor", "--skip-update-check"]
 rustflags = ["-C", "link-arg=-nostartfiles"]
 
 [unstable]
