@@ -40,6 +40,8 @@ const TEXT_Y: i32 = (HEIGHT - GLYPH * SCALE) / 2;
 
 const SAMPLE_PERIOD: Duration = Duration::from_millis(8);
 const BUTTON_DEBOUNCE: Duration = Duration::from_millis(24);
+const BOOT_HOLD: Duration = Duration::from_millis(900);
+const SLEEP_OPTIONS: [(u64, &str); 3] = [(30, "30 с"), (60, "60 с"), (120, "120 с")];
 const TOUCH_TIMEOUT: Duration = Duration::from_millis(90);
 const TOUCH_ADDRESS: u8 = 0x15;
 const TOUCH_POINTS_REGISTER: u8 = 0x02;
@@ -105,13 +107,29 @@ fn main() -> ! {
     let mut pet = Pet::new();
     let mut gestures = Gestures::default();
     let mut last_touch = Instant::now();
-    let mut reported_drag = false;
+    let mut last_input = Instant::now();
+    let mut boot_since = None;
+    let mut sleep_choice = 1;
+    let mut settings_contact = false;
     loop {
         let (boot_pressed, pwr_pressed) = (boot.pressed(), pwr.pressed());
+        if boot_pressed {
+            boot_since = Some(boot.changed);
+        }
         let next = if pwr_pressed {
+            boot_since = None;
             Some(Screen::Pet)
-        } else if boot_pressed {
-            Some(Screen::Topics)
+        } else if let Some(start) = boot_since {
+            if !boot.stable || (boot.raw && start.elapsed() >= BOOT_HOLD) {
+                boot_since = None;
+                Some(if boot.stable || boot.changed - start >= BOOT_HOLD {
+                    Screen::Topics
+                } else {
+                    Screen::Settings
+                })
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -121,53 +139,89 @@ fn main() -> ! {
             } else {
                 next
             };
-            topics.drag(None);
+            settings_contact = true;
+            topics.close_note();
+            topics.cancel_contact();
             gestures.clear();
             let _ = pet.tick(Instant::now().duration_since_epoch().as_millis());
-            display = display.draw(|y, row| match screen {
-                Screen::Greeting => draw_greeting(y, row),
-                Screen::Topics => topics.draw_row(y, row),
-                Screen::Pet => pet.draw_row(y, row),
-            });
+            display = screen.draw(display, &topics, &pet, sleep_choice);
             report(&mut usb, screen.message());
         }
 
         let now = Instant::now();
         let now_ms = now.duration_since_epoch().as_millis();
-        if screen != Screen::Greeting {
-            let sample = match touch_position(&mut i2c) {
-                Ok(position) => {
-                    last_touch = now;
-                    Some(position)
-                }
-                Err(_) if last_touch.elapsed() >= TOUCH_TIMEOUT => Some(None),
-                Err(_) => None,
-            };
-
-            match screen {
-                Screen::Topics => {
-                    if sample.is_some_and(|position| topics.drag(position)) {
-                        display = display.draw(|y, row| topics.draw_row(y, row));
-                        if !reported_drag {
-                            report(&mut usb, b"Topic map moved\r\n");
-                            reported_drag = true;
-                        }
-                    }
-                }
-                Screen::Pet => {
-                    let gesture = sample.and_then(|position| gestures.sample(position, now_ms));
-                    if let Some(gesture) = gesture {
-                        pet.react(gesture, now_ms);
-                        report(&mut usb, gesture_message(gesture));
-                    }
-                    if gesture.is_some() || pet.tick(now_ms) {
-                        display = display.draw_region(pet::REDRAW_X, pet::REDRAW_Y, |y, row| {
-                            pet.draw_row(y, row)
-                        });
-                    }
-                }
-                Screen::Greeting => {}
+        let sample = match touch_position(&mut i2c) {
+            Ok(position) => {
+                last_touch = now;
+                Some(position)
             }
+            Err(_) if last_touch.elapsed() >= TOUCH_TIMEOUT => Some(None),
+            Err(_) => None,
+        };
+
+        if boot.stable || pwr.stable || matches!(sample, Some(Some(_))) {
+            last_input = now;
+        } else if last_input.elapsed() >= Duration::from_secs(SLEEP_OPTIONS[sleep_choice].0) {
+            display = display.sleep();
+            report(&mut usb, b"Display asleep\r\n");
+            settings_contact = true;
+            topics.cancel_contact();
+            gestures.clear();
+            // Sleep-in needs time to settle before sending sleep-out.
+            let asleep_since = Instant::now();
+            loop {
+                wait_for_interrupt();
+                let buttons = (boot.pressed(), pwr.pressed());
+                if buttons.0 || buttons.1 {
+                    break;
+                }
+            }
+            while asleep_since.elapsed() < Duration::from_millis(120) {
+                wait_for_interrupt();
+            }
+            display = display.wake(&delay);
+            pet.tick(Instant::now().duration_since_epoch().as_millis());
+            display = screen.draw(display, &topics, &pet, sleep_choice).show();
+            last_input = Instant::now();
+            last_touch = last_input;
+            report(&mut usb, b"Display awake\r\n");
+            continue;
+        }
+
+        match screen {
+            Screen::Topics => {
+                if sample.is_some_and(|position| {
+                    let tap = gestures.sample(position, now_ms) == Some(Gesture::Tap);
+                    topics.touch(position, tap)
+                }) {
+                    display = display.draw(|y, row| topics.draw_row(y, row));
+                }
+            }
+            Screen::Pet => {
+                let gesture = sample.and_then(|position| gestures.sample(position, now_ms));
+                if let Some(gesture) = gesture {
+                    pet.react(gesture, now_ms);
+                    report(&mut usb, gesture_message(gesture));
+                }
+                if gesture.is_some() || pet.tick(now_ms) {
+                    display = display
+                        .draw_region(pet::REDRAW_X, pet::REDRAW_Y, |y, row| pet.draw_row(y, row));
+                }
+            }
+            Screen::Settings => {
+                if let Some(position) = sample {
+                    if !settings_contact
+                        && let Some(p) = position
+                        && (127..337).contains(&p.x)
+                        && (206..258).contains(&p.y)
+                    {
+                        sleep_choice = ((p.x - 127) / 70) as usize;
+                        display = screen.draw(display, &topics, &pet, sleep_choice);
+                    }
+                    settings_contact = position.is_some();
+                }
+            }
+            Screen::Greeting => {}
         }
         wait_for_interrupt();
     }
@@ -176,13 +230,24 @@ fn main() -> ! {
 #[derive(Clone, Copy, PartialEq)]
 enum Screen {
     Greeting,
+    Settings,
     Topics,
     Pet,
 }
 
 impl Screen {
+    fn draw(self, display: Display, topics: &Topics, pet: &Pet, sleep_choice: usize) -> Display {
+        display.draw(|y, row| match self {
+            Screen::Settings => draw_settings(y, row, sleep_choice),
+            Screen::Greeting => draw_greeting(y, row),
+            Screen::Topics => topics.draw_row(y, row),
+            Screen::Pet => pet.draw_row(y, row),
+        })
+    }
+
     fn message(self) -> &'static [u8] {
         match self {
+            Self::Settings => b"Settings open\r\n",
             Self::Greeting => b"Greeting open\r\n",
             Self::Topics => b"Topic map open\r\n",
             Self::Pet => b"Pet open\r\n",
@@ -258,6 +323,26 @@ fn touch_position(i2c: &mut I2c<'_, Blocking>) -> Result<Option<Point>, I2cError
     Ok(Some(Point::new(WIDTH - 1 - x, HEIGHT - 1 - y)))
 }
 
+fn draw_settings(y: i32, row: &mut Row<'_>, choice: usize) {
+    use display::rgb;
+    let text = rgb(232, 241, 255);
+    row.fill(rgb(12, 19, 30));
+    row.label(y - 94, WIDTH / 2, "Настройки", text);
+    row.label(y - 168, WIDTH / 2, "Гасить экран через", text);
+    for (index, &(_, label)) in SLEEP_OPTIONS.iter().enumerate() {
+        let x = 127 + 70 * index as i32;
+        if (206..258).contains(&y) {
+            let fill = if index == choice {
+                rgb(30, 106, 98)
+            } else {
+                rgb(31, 48, 65)
+            };
+            row.span(x, x + 68, fill);
+        }
+        row.label(y - 223, x + 34, label, text);
+    }
+    row.label(y - 304, WIDTH / 2, "До перезагрузки", text);
+}
 fn draw_greeting(y: i32, row: &mut Row<'_>) {
     row.fill([0; 2]);
     if !(TEXT_Y..TEXT_Y + GLYPH * SCALE).contains(&y) {

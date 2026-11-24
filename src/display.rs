@@ -52,12 +52,21 @@ impl Display {
         ] {
             display = display.command(register, &[data]);
         }
-        display = display.command(0x11, &[]); // Sleep out.
-        delay.delay_millis(120);
+        display = display.wake(delay);
         // Also clear the GRAM margins around the 466×466 viewport.
         display.write_strips(0..CONTROLLER_SIZE, 0..CONTROLLER_SIZE, |_, pixels| {
             pixels.fill(0);
         })
+    }
+
+    pub fn sleep(self) -> Self {
+        self.command(0x28, &[]).command(0x10, &[])
+    }
+
+    pub fn wake(self, delay: &Delay) -> Self {
+        let display = self.command(0x11, &[]);
+        delay.delay_millis(120);
+        display
     }
 
     pub fn show(self) -> Self {
