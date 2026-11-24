@@ -3,6 +3,9 @@
 
 mod display;
 mod gestures;
+#[cfg_attr(feature = "english", path = "lang/en.rs")]
+#[cfg_attr(not(feature = "english"), path = "lang/ru.rs")]
+mod lang;
 mod pet;
 mod topics;
 
@@ -41,7 +44,11 @@ const TEXT_Y: i32 = (HEIGHT - GLYPH * SCALE) / 2;
 const SAMPLE_PERIOD: Duration = Duration::from_millis(8);
 const BUTTON_DEBOUNCE: Duration = Duration::from_millis(24);
 const BOOT_HOLD: Duration = Duration::from_millis(900);
-const SLEEP_OPTIONS: [(u64, &str); 3] = [(30, "30 с"), (60, "60 с"), (120, "120 с")];
+const SLEEP_OPTIONS: [(u64, &str); 3] = [
+    (30, crate::lang::S30),
+    (60, crate::lang::S60),
+    (120, crate::lang::S120),
+];
 const TOUCH_TIMEOUT: Duration = Duration::from_millis(90);
 const TOUCH_ADDRESS: u8 = 0x15;
 const TOUCH_POINTS_REGISTER: u8 = 0x02;
@@ -325,8 +332,8 @@ fn draw_settings(y: i32, row: &mut Row<'_>, choice: usize) {
     let text = rgb(255, 242, 214);
     row.fill(rgb(20, 14, 25));
     row.arch(y);
-    row.label(y - 94, WIDTH / 2, "Настройки", text);
-    row.label(y - 154, WIDTH / 2, "Гасить экран через", text);
+    row.label(y - 94, WIDTH / 2, crate::lang::SETTINGS, text);
+    row.label(y - 154, WIDTH / 2, crate::lang::TIMEOUT, text);
     for (index, &(_, label)) in SLEEP_OPTIONS.iter().enumerate() {
         let x = 74 + 106 * index as i32;
         if (196..272).contains(&y) {
@@ -343,7 +350,7 @@ fn draw_settings(y: i32, row: &mut Row<'_>, choice: usize) {
         }
         row.label(y - 223, x + 51, label, text);
     }
-    row.label(y - 304, WIDTH / 2, "До перезагрузки", text);
+    row.label(y - 304, WIDTH / 2, crate::lang::UNTIL_RESET, text);
 }
 fn draw_greeting(y: i32, row: &mut Row<'_>) {
     row.fill(display::rgb(20, 14, 25));

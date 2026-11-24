@@ -1,9 +1,12 @@
 use core::ops::Range;
+#[cfg(feature = "english")]
+use embedded_graphics::mono_font::ascii::FONT_9X18_BOLD;
+#[cfg(not(feature = "english"))]
+use embedded_graphics::mono_font::iso_8859_5::FONT_9X18_BOLD;
 
 use embedded_graphics::{
     geometry::{OriginDimensions, Point},
     image::GetPixel,
-    mono_font::iso_8859_5::FONT_9X18_BOLD,
     pixelcolor::BinaryColor,
 };
 use esp_hal::{

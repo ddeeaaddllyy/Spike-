@@ -3,6 +3,9 @@ name = "Spike"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+english = []
+
 [dependencies]
 critical-section = "1.2.0"
 embedded-graphics = "0.8.2"

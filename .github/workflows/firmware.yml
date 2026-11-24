@@ -14,7 +14,16 @@ concurrency:
 
 jobs:
   build:
-    name: Verify tag and build ESP32-S3 firmware
+    strategy:
+      matrix:
+        include:
+          - language: ru
+            flags: ""
+            image: spike-esp32s3
+          - language: en
+            flags: "--features english"
+            image: spike-esp32s3-en
+    name: Build ESP32-S3 firmware (${{ matrix.language }})
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -40,8 +49,8 @@ jobs:
       - name: Check and build
         run: |
           cargo +esp fmt --all -- --check
-          cargo +esp clippy --release --locked -- -D warnings
-          cargo +esp build --release --locked
+          cargo +esp clippy --release --locked ${{ matrix.flags }} -- -D warnings
+          cargo +esp build --release --locked ${{ matrix.flags }}
 
       - name: Install espflash
         run: |
@@ -58,14 +67,14 @@ jobs:
         run: |
           mkdir -p dist
           espflash save-image --chip esp32s3 --flash-size 8mb --merge --skip-padding \
-            target/xtensa-esp32s3-none-elf/release/Spike dist/spike-esp32s3.bin
+            target/xtensa-esp32s3-none-elf/release/Spike dist/${{ matrix.image }}.bin
           cd dist
-          sha256sum spike-esp32s3.bin > spike-esp32s3.bin.sha256
+          sha256sum ${{ matrix.image }}.bin > ${{ matrix.image }}.bin.sha256
 
       - uses: actions/upload-artifact@v6
         with:
-          name: firmware
-          path: dist/spike-esp32s3.bin*
+          name: firmware-${{ matrix.language }}
+          path: dist/${{ matrix.image }}.bin*
           if-no-files-found: error
           overwrite: true
 
@@ -79,7 +88,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v7
         with:
-          name: firmware
+          pattern: firmware-*
+          merge-multiple: true
           path: dist
 
       - name: Verify and publish firmware
@@ -87,8 +97,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          sha256sum --check spike-esp32s3.bin.sha256
-          assets=(spike-esp32s3.bin spike-esp32s3.bin.sha256)
+          sha256sum --check spike-esp32s3.bin.sha256 spike-esp32s3-en.bin.sha256
+          assets=(spike-esp32s3{,-en}.bin{,.sha256})
           if draft=$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft); then
             if [[ "$draft" == 'true' ]]; then
               gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${assets[@]}"

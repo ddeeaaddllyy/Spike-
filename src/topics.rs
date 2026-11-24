@@ -59,38 +59,14 @@ const TREES: &[Tree] = &[
         link: rgb(173, 125, 91),
         root_fill: rgb(83, 39, 56),
         nodes: &[
-            Node::root("МЦКО: 11 класс"),
-            Node::topic("Планиметрия", -816, "Площадь по углу\nS = ab sin(C)/2"),
-            Node::topic(
-                "Стереометрия",
-                -544,
-                "Прямые и плоскости\nУгол с проекцией\nПризма: V = Sосн*h\nПирамида: V = Sосн*h/3",
-            ),
-            Node::topic(
-                "Уравнения",
-                -272,
-                "Показательные и с корнем\nЛогарифмические: ОДЗ\nТригонометрические\nСистемы и задачи",
-            ),
-            Node::topic(
-                "Производная",
-                0,
-                "Касательная: k = f'(x)\nЗнак плюс: рост\nЗнак минус: убывание",
-            ),
-            Node::topic(
-                "Функции",
-                272,
-                "Значение по графику\nМаксимум и минимум\nЧисло решений:\nпересечения графиков",
-            ),
-            Node::topic(
-                "Выражения",
-                544,
-                "Степени и корни\nПри a>0, b>0:\nlg(ab) = lg(a)+lg(b)",
-            ),
-            Node::topic(
-                "Вероятность",
-                816,
-                "Совместный исход\nпри независимости:\nP(A и B) = P(A)*P(B)",
-            ),
+            Node::root(crate::lang::GRADE_11),
+            Node::topic(crate::lang::PLANE, -816, crate::lang::AREA_NOTE),
+            Node::topic(crate::lang::SOLID, -544, crate::lang::SOLID_NOTE),
+            Node::topic(crate::lang::EQUATIONS, -272, crate::lang::EQ11_NOTE),
+            Node::topic(crate::lang::DERIVATIVE, 0, crate::lang::DERIVATIVE_NOTE),
+            Node::topic(crate::lang::FUNCTIONS, 272, crate::lang::FUNCTIONS_NOTE),
+            Node::topic(crate::lang::EXPRESSIONS, 544, crate::lang::EXPR_NOTE),
+            Node::topic(crate::lang::PROBABILITY, 816, crate::lang::PROB_NOTE),
         ],
     },
     Tree {
@@ -99,42 +75,14 @@ const TREES: &[Tree] = &[
         link: rgb(158, 106, 142),
         root_fill: rgb(64, 35, 65),
         nodes: &[
-            Node::root("МЦКО: 10 класс"),
-            Node::topic(
-                "Множества",
-                -816,
-                "Объединение: хотя бы одно\nПересечение: оба\nДиаграммы Эйлера",
-            ),
-            Node::topic(
-                "Геометрия",
-                -544,
-                "Расстояния и углы\nПрямые и плоскости\nПлощади и объёмы",
-            ),
-            Node::topic(
-                "Вычисления",
-                -272,
-                "Степени и корни\nПрикидка и округление\nСтандартный вид числа",
-            ),
-            Node::topic(
-                "Прогрессии",
-                0,
-                "a(n) = a1 + (n-1)d\nb(n) = b1*q^(n-1)\nПри |q|<1: S = b1/(1-q)",
-            ),
-            Node::topic(
-                "Уравнения",
-                272,
-                "Рациональные и с корнем\nНеравенства: интервалы\nsin(x), cos(x), tg(x)\nУчитывай период",
-            ),
-            Node::topic(
-                "Графики",
-                544,
-                "Степенные функции\nРешить f(x)=g(x):\nнайти абсциссы\nточек пересечения",
-            ),
-            Node::topic(
-                "Случайные события",
-                816,
-                "Исходы и комбинаторика\nУсловная вероятность\nНезависимые испытания\nРаспределения",
-            ),
+            Node::root(crate::lang::GRADE_10),
+            Node::topic(crate::lang::SETS, -816, crate::lang::SETS_NOTE),
+            Node::topic(crate::lang::GEOMETRY, -544, crate::lang::GEO_NOTE),
+            Node::topic(crate::lang::NUMBERS, -272, crate::lang::NUM_NOTE),
+            Node::topic(crate::lang::SEQUENCES, 0, crate::lang::SEQ_NOTE),
+            Node::topic(crate::lang::EQUATIONS, 272, crate::lang::EQ10_NOTE),
+            Node::topic(crate::lang::GRAPHS, 544, crate::lang::GRAPH_NOTE),
+            Node::topic(crate::lang::EVENTS, 816, crate::lang::EVENTS_NOTE),
         ],
     },
 ];
@@ -235,7 +183,7 @@ impl Topics {
                 if (316..392).contains(&y) {
                     row.span(99 + bevel, 367 - bevel, tree.root_fill);
                 }
-                row.label(y - 345, center, "К карте", TEXT);
+                row.label(y - 345, center, crate::lang::BACK, TEXT);
             }
             return;
         }
@@ -263,8 +211,8 @@ impl Topics {
 
         if self.show_hint && (355..411).contains(&y) {
             row.span(104, 362, SURFACE);
-            row.label(y - 361, WIDTH / 2, "Нажми на тему", TEXT);
-            row.label(y - 384, WIDTH / 2, "Ветви по бокам, 10 кл. ниже", HINT);
+            row.label(y - 361, WIDTH / 2, crate::lang::TAP_TOPIC, TEXT);
+            row.label(y - 384, WIDTH / 2, crate::lang::MAP_HINT, HINT);
         }
     }
 }

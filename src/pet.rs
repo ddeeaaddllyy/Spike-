@@ -1,4 +1,4 @@
-use core::ops::Range;
+﻿use core::ops::Range;
 
 use crate::{
     display::{Color, Row, WIDTH, rgb},
@@ -64,12 +64,12 @@ impl Action {
 
     fn caption(self) -> (&'static str, Color) {
         match self {
-            Self::Idle => ("Ждёт тебя", WHITE),
-            Self::Happy => ("Рад тебя видеть", PINK),
-            Self::Petted => ("Мурчит", PINK),
-            Self::Walk => ("Гуляет", WHITE),
-            Self::Jump => ("Прыгает", STAR),
-            Self::Sleep => ("Спит", WHITE),
+            Self::Idle => (crate::lang::IDLE, WHITE),
+            Self::Happy => (crate::lang::HAPPY, PINK),
+            Self::Petted => (crate::lang::PETTED, PINK),
+            Self::Walk => (crate::lang::WALK, WHITE),
+            Self::Jump => (crate::lang::JUMP, STAR),
+            Self::Sleep => (crate::lang::SLEEP, WHITE),
         }
     }
 }
@@ -231,7 +231,7 @@ impl Pet {
                 );
             }
         }
-        row.label(y - 29, CENTER, "Спайк", WHITE);
+        row.label(y - 29, CENTER, crate::lang::NAME, WHITE);
         let (text, color) = self.action.caption();
         row.label(y - 392, CENTER, text, color);
     }
