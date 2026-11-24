@@ -154,6 +154,22 @@ pub struct Row<'a> {
 }
 
 impl Row<'_> {
+    /// Twin lancet mouldings, drawn outside the central text area.
+    pub fn arch(&mut self, y: i32) {
+        if !(22..422).contains(&y) {
+            return;
+        }
+        let dy = (y - 22).min(172);
+        let half = dy * (344 - dy) / 159;
+        for (inset, color) in [(0, rgb(112, 78, 78)), (6, rgb(69, 49, 68))] {
+            let radius = (half - inset).max(0);
+            let left = WIDTH / 2 - radius;
+            let right = WIDTH / 2 + radius;
+            self.span(left, left + 2, color);
+            self.span(right, right + 2, color);
+        }
+    }
+
     pub fn fill(&mut self, color: Color) {
         self.span(self.left, self.right, color);
     }

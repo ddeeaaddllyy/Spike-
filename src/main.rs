@@ -190,10 +190,7 @@ fn main() -> ! {
 
         match screen {
             Screen::Topics => {
-                if sample.is_some_and(|position| {
-                    let tap = gestures.sample(position, now_ms) == Some(Gesture::Tap);
-                    topics.touch(position, tap)
-                }) {
+                if sample.is_some_and(|position| topics.touch(position)) {
                     display = display.draw(|y, row| topics.draw_row(y, row));
                 }
             }
@@ -212,10 +209,10 @@ fn main() -> ! {
                 if let Some(position) = sample {
                     if !settings_contact
                         && let Some(p) = position
-                        && (127..337).contains(&p.x)
-                        && (206..258).contains(&p.y)
+                        && (74..392).contains(&p.x)
+                        && (196..272).contains(&p.y)
                     {
-                        sleep_choice = ((p.x - 127) / 70) as usize;
+                        sleep_choice = ((p.x - 74) / 106) as usize;
                         display = screen.draw(display, &topics, &pet, sleep_choice);
                     }
                     settings_contact = position.is_some();
@@ -325,26 +322,32 @@ fn touch_position(i2c: &mut I2c<'_, Blocking>) -> Result<Option<Point>, I2cError
 
 fn draw_settings(y: i32, row: &mut Row<'_>, choice: usize) {
     use display::rgb;
-    let text = rgb(232, 241, 255);
-    row.fill(rgb(12, 19, 30));
+    let text = rgb(255, 242, 214);
+    row.fill(rgb(20, 14, 25));
+    row.arch(y);
     row.label(y - 94, WIDTH / 2, "Настройки", text);
-    row.label(y - 168, WIDTH / 2, "Гасить экран через", text);
+    row.label(y - 154, WIDTH / 2, "Гасить экран через", text);
     for (index, &(_, label)) in SLEEP_OPTIONS.iter().enumerate() {
-        let x = 127 + 70 * index as i32;
-        if (206..258).contains(&y) {
+        let x = 74 + 106 * index as i32;
+        if (196..272).contains(&y) {
             let fill = if index == choice {
-                rgb(30, 106, 98)
+                rgb(118, 48, 70)
             } else {
-                rgb(31, 48, 65)
+                rgb(57, 38, 55)
             };
-            row.span(x, x + 68, fill);
+            let cut = (8 - (y - 196).min(271 - y)).max(0);
+            row.span(x + cut, x + 103 - cut, rgb(202, 160, 118));
+            if (199..269).contains(&y) {
+                row.span(x + cut + 2, x + 101 - cut, fill);
+            }
         }
-        row.label(y - 223, x + 34, label, text);
+        row.label(y - 223, x + 51, label, text);
     }
     row.label(y - 304, WIDTH / 2, "До перезагрузки", text);
 }
 fn draw_greeting(y: i32, row: &mut Row<'_>) {
-    row.fill([0; 2]);
+    row.fill(display::rgb(20, 14, 25));
+    row.arch(y);
     if !(TEXT_Y..TEXT_Y + GLYPH * SCALE).contains(&y) {
         return;
     }
@@ -355,7 +358,7 @@ fn draw_greeting(y: i32, row: &mut Row<'_>) {
         for bit in 0..GLYPH {
             if glyph & (1 << bit) != 0 {
                 let x = start + bit * SCALE;
-                row.span(x, x + SCALE, [0xFF; 2]);
+                row.span(x, x + SCALE, display::rgb(255, 242, 214));
             }
         }
     }

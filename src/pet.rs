@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub const REDRAW_X: Range<i32> = 48..418;
-pub const REDRAW_Y: Range<i32> = 44..416;
+pub const REDRAW_Y: Range<i32> = 44..418;
 
 const CENTER: i32 = WIDTH / 2;
 const GROUND: i32 = 355;
@@ -31,7 +31,7 @@ const SPRITE_SCALE: i32 = 2;
 const BACKGROUND: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/moonlake.bin"));
 const SHADOW: Color = rgb(23, 23, 36);
 const STAR: Color = rgb(249, 218, 153);
-const WHITE: Color = rgb(241, 233, 250);
+const WHITE: Color = rgb(255, 242, 214);
 const PINK: Color = rgb(246, 114, 146);
 
 const HEART: &[u8] = &[
@@ -214,6 +214,23 @@ impl Pet {
             _ => {}
         }
 
+        if (22..54).contains(&y) || (385..417).contains(&y) {
+            let top = if y < 54 { 22 } else { 385 };
+            let radius = if y < 54 { 53 } else { 90 };
+            let inset = (9 - (y - top).min(top + 31 - y)).max(0);
+            row.span(
+                CENTER - radius + inset,
+                CENTER + radius - inset,
+                rgb(202, 160, 118),
+            );
+            if (top + 2..top + 30).contains(&y) {
+                row.span(
+                    CENTER - radius + inset + 2,
+                    CENTER + radius - inset - 2,
+                    rgb(49, 26, 45),
+                );
+            }
+        }
         row.label(y - 29, CENTER, "Спайк", WHITE);
         let (text, color) = self.action.caption();
         row.label(y - 392, CENTER, text, color);

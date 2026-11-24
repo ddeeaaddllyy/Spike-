@@ -2,11 +2,11 @@ use embedded_graphics::geometry::Point;
 
 use crate::display::{Color, HEIGHT, Row, WIDTH, rgb};
 
-const BACKGROUND: Color = rgb(8, 12, 17);
-const GRID: Color = rgb(27, 39, 51);
-const SURFACE: Color = rgb(20, 32, 45);
-const TEXT: Color = rgb(236, 245, 255);
-const HINT: Color = rgb(154, 176, 199);
+const BACKGROUND: Color = rgb(20, 14, 25);
+const GRID: Color = rgb(68, 46, 60);
+const SURFACE: Color = rgb(54, 32, 49);
+const TEXT: Color = rgb(255, 242, 214);
+const HINT: Color = rgb(221, 197, 174);
 
 struct Node {
     label: &'static str,
@@ -18,7 +18,7 @@ struct Node {
 
 impl Node {
     fn width(&self) -> i32 {
-        (self.label.chars().count() as i32 * 10 + 24).max(148)
+        (self.label.chars().count() as i32 * 10 + 52).max(218)
     }
 
     const fn topic(label: &'static str, x: i32, note: &'static str) -> Self {
@@ -55,9 +55,9 @@ struct Tree {
 const TREES: &[Tree] = &[
     Tree {
         y: 0,
-        accent: rgb(112, 223, 199),
-        link: rgb(52, 146, 134),
-        root_fill: rgb(19, 57, 56),
+        accent: rgb(238, 202, 151),
+        link: rgb(173, 125, 91),
+        root_fill: rgb(83, 39, 56),
         nodes: &[
             Node::root("МЦКО: 11 класс"),
             Node::topic("Планиметрия", -816, "Площадь по углу\nS = ab sin(C)/2"),
@@ -95,9 +95,9 @@ const TREES: &[Tree] = &[
     },
     Tree {
         y: 480,
-        accent: rgb(255, 192, 116),
-        link: rgb(177, 117, 65),
-        root_fill: rgb(70, 45, 29),
+        accent: rgb(229, 178, 204),
+        link: rgb(158, 106, 142),
+        root_fill: rgb(64, 35, 65),
         nodes: &[
             Node::root("МЦКО: 10 класс"),
             Node::topic(
@@ -142,6 +142,8 @@ const TREES: &[Tree] = &[
 pub struct Topics {
     offset: Point,
     previous_touch: Option<Point>,
+    origin: Option<Point>,
+    dragging: bool,
     show_hint: bool,
     selected: Option<(&'static Tree, &'static Node)>,
 }
@@ -151,6 +153,8 @@ impl Topics {
         Self {
             offset: Point::new(WIDTH / 2, 122),
             previous_touch: None,
+            origin: None,
+            dragging: false,
             show_hint: true,
             selected: None,
         }
@@ -158,39 +162,31 @@ impl Topics {
 
     pub fn cancel_contact(&mut self) {
         self.previous_touch = None;
+        self.origin = None;
+        self.dragging = false;
     }
     pub fn close_note(&mut self) {
         self.selected = None;
     }
 
-    pub fn touch(&mut self, position: Option<Point>, tap: bool) -> bool {
-        let previous = core::mem::replace(&mut self.previous_touch, position);
-        if tap && let Some(point) = previous {
-            if self.selected.is_some() {
-                if (166..300).contains(&point.x) && (327..371).contains(&point.y) {
-                    self.close_note();
-                    return true;
-                }
-            } else {
-                for tree in TREES {
-                    for node in &tree.nodes[1..] {
-                        let dx = point.x - self.offset.x - node.x;
-                        let dy = point.y - self.offset.y - tree.y - node.y;
-                        if dx.abs() < node.width() / 2 && dy.abs() < 19 {
-                            self.selected = Some((tree, node));
-                            return true;
-                        }
-                    }
-                }
-            }
+    pub fn touch(&mut self, position: Option<Point>) -> bool {
+        let Some(point) = position else {
+            let tap = self.origin.filter(|_| !self.dragging);
+            self.cancel_contact();
+            return tap.is_some_and(|point| self.activate(point));
+        };
+        let origin = *self.origin.get_or_insert(point);
+        let previous = self.previous_touch.replace(point).unwrap_or(point);
+        let delta = point - origin;
+        if !self.dragging && delta.x.abs().max(delta.y.abs()) <= 24 {
+            return false;
         }
+        let from = if self.dragging { previous } else { origin };
+        self.dragging = true;
         if self.selected.is_some() {
             return false;
         }
-        let (Some(previous), Some(position)) = (previous, position) else {
-            return false;
-        };
-        let mut next = self.offset + position - previous;
+        let mut next = self.offset + point - from;
         // Keep every outer node reachable at the center of the round screen.
         next.x = next.x.clamp(WIDTH / 2 - 816, WIDTH / 2 + 816);
         next.y = next.y.clamp(HEIGHT / 2 - 576, HEIGHT / 2);
@@ -202,8 +198,30 @@ impl Topics {
         true
     }
 
+    fn activate(&mut self, point: Point) -> bool {
+        if self.selected.is_some() {
+            if (84..382).contains(&point.x) && (302..406).contains(&point.y) {
+                self.close_note();
+                return true;
+            }
+        } else {
+            for tree in TREES {
+                for node in &tree.nodes[1..] {
+                    let dx = point.x - self.offset.x - node.x;
+                    let dy = point.y - self.offset.y - tree.y - node.y;
+                    if dx.abs() <= node.width() / 2 + 12 && dy.abs() <= 48 {
+                        self.selected = Some((tree, node));
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
     pub fn draw_row(&self, y: i32, row: &mut Row<'_>) {
         row.fill(BACKGROUND);
+        row.arch(y);
         if let Some((tree, node)) = self.selected {
             let center = WIDTH / 2;
             row.label(y - 91, center, tree.nodes[0].label, tree.accent);
@@ -211,9 +229,13 @@ impl Topics {
             for (i, line) in node.note.lines().enumerate() {
                 row.label(y - 195 - 25 * i as i32, center, line, TEXT);
             }
-            if (327..371).contains(&y) {
-                row.span(166, 300, tree.root_fill);
-                row.label(y - 340, center, "К карте", TEXT);
+            if (314..394).contains(&y) {
+                let bevel = (7 - (y - 314).min(393 - y)).max(0);
+                row.span(96 + bevel, 370 - bevel, tree.accent);
+                if (316..392).contains(&y) {
+                    row.span(99 + bevel, 367 - bevel, tree.root_fill);
+                }
+                row.label(y - 345, center, "К карте", TEXT);
             }
             return;
         }
@@ -262,7 +284,7 @@ fn draw_link(row: &mut Row<'_>, y: i32, offset: i32, parent: &Node, child: &Node
 
 fn draw_node(row: &mut Row<'_>, y: i32, offset: i32, node: &Node, tree: &Tree) {
     let root = node.parent.is_none();
-    let half_height = if root { 24 } else { 19 };
+    let half_height = if root { 24 } else { 37 };
     let distance_from_edge = half_height - (y - node.y).abs();
     if distance_from_edge <= 0 {
         return;
@@ -270,7 +292,7 @@ fn draw_node(row: &mut Row<'_>, y: i32, offset: i32, node: &Node, tree: &Tree) {
 
     let center = offset + node.x;
     let width = node.width();
-    let inset = (4 - distance_from_edge).max(0);
+    let inset = (10 - distance_from_edge).max(0);
     let left = center - width / 2 + inset;
     let right = center + width / 2 - inset;
     if right <= 0 || left >= WIDTH {
